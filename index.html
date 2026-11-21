@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atlas</title>
+<meta name="theme-color" content="#14233a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  html,body{margin:0;height:100%;background:#14233a;color:#eef2f3;font:16px/1.5 system-ui,-apple-system,sans-serif}
+  .gate{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  form{width:min(340px,100%);display:flex;flex-direction:column;gap:12px;text-align:center}
+  img{width:88px;height:88px;border-radius:20px;margin:0 auto 8px}
+  h1{margin:0;font-size:24px}
+  input{font:500 18px system-ui;padding:12px 14px;border-radius:8px;border:1px solid #3a4d68;background:#0f1a2b;color:#eef2f3;text-align:center}
+  button{font:700 16px system-ui;padding:12px;border-radius:8px;border:0;background:#d9861a;color:#2a1a04;cursor:pointer}
+  p{margin:0;min-height:22px;font-size:14px;color:#f07a63}
+  .wait{color:#9fb0c3}
+</style>
+</head>
+<body>
+<div class="gate">
+  <form id="f">
+    <img src="icon-180.png" alt="">
+    <h1>Atlas</h1>
+    <input id="pw" type="password" placeholder="Hasło" autocomplete="current-password" autofocus>
+    <button type="submit">Otwórz</button>
+    <p id="msg"></p>
+  </form>
+</div>
+<script>
+// Treść atlasu jest zaszyfrowana (AES-GCM). Hasło odszyfrowuje ją w przeglądarce; zapamiętujemy je na tym urządzeniu.
+const K="atlas-haslo";
+async function open(pw,remember){
+  const msg=document.getElementById("msg"); msg.className="wait"; msg.textContent="Otwieram…";
+  try{
+    const buf=new Uint8Array(await (await fetch("atlas.enc",{cache:"no-cache"})).arrayBuffer());
+    const salt=buf.slice(0,16),iv=buf.slice(16,28),data=buf.slice(28);
+    const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+    const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:250000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+    const html=new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv},key,data));
+    if(remember){try{localStorage.setItem(K,pw)}catch(e){}}
+    document.open(); document.write(html); document.close();
+  }catch(e){
+    try{localStorage.removeItem(K)}catch(_){}
+    msg.className=""; msg.textContent=e&&e.name==="OperationError"?"Złe hasło.":"Nie udało się wczytać atlasu. Sprawdź internet.";
+  }
+}
+document.getElementById("f").onsubmit=e=>{e.preventDefault();const pw=document.getElementById("pw").value;if(pw)open(pw,true)};
+let saved=null; try{saved=localStorage.getItem(K)}catch(e){}
+if(saved) open(saved,false);
+</script>
+</body>
+</html>
